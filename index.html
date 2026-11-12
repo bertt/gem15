@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GEM-15 Terrain Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <h1>GEM-15 Terrain</h1>
+    <div class="row">
+      <label><input type="radio" name="layer" value="dtm" checked> DTM (terrain)</label>
+      <label><input type="radio" name="layer" value="dsm"> DSM (surface)</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="shade" checked> Hillshade</label>
+    </div>
+    <div id="legend">
+      <div id="ramp"></div>
+      <div id="ticks"></div>
+      <div class="unit">Elevation (m)</div>
+    </div>
+    <div id="status">Zoom in to level 7 or higher to load data.</div>
+    <div id="about">
+      Heights: orthometric, EGM96 geoid.
+      <a href="https://developers.google.com/earth-engine/datasets/catalog/projects_climate-and-sustainability_assets_gem-15_v1" target="_blank" rel="noopener">Dataset description</a>
+      &middot;
+      <a href="https://storage.googleapis.com/climate-and-sustainability/gem-15/stac/catalog.json" target="_blank" rel="noopener">STAC catalog</a>
+    </div>
+  </div>
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/proj4@2.15.0/dist/proj4.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
