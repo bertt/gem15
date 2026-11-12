@@ -326,10 +326,32 @@ const map = new maplibregl.Map({
     sources: {
       dem: { type: 'raster-dem', tiles: [demUrl()], tileSize: TILE, encoding: 'terrarium', minzoom: MIN_DATA_ZOOM, maxzoom: 13 },
       gem: { type: 'raster', tiles: [tileUrl()], tileSize: TILE, minzoom: MIN_DATA_ZOOM, maxzoom: 13, attribution: 'GEM-15 &copy; Google, CC-BY-4.0' },
+      countries: {
+        type: 'geojson',
+        data: 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
+        attribution: 'Borders &copy; Natural Earth',
+      },
     },
     layers: [
       { id: 'ocean', type: 'background', paint: { 'background-color': OCEAN } },
+      {
+        id: 'countries-fill',
+        type: 'fill',
+        source: 'countries',
+        maxzoom: MIN_DATA_ZOOM,
+        paint: { 'fill-color': '#e8e6df' },
+      },
       { id: 'gem', type: 'raster', source: 'gem', paint: { 'raster-fade-duration': 0 } },
+      {
+        id: 'countries-outline',
+        type: 'line',
+        source: 'countries',
+        paint: {
+          'line-color': '#444',
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 6, 0.9, 10, 0.5],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.5, 8, 1.2],
+        },
+      },
     ],
   },
 });
