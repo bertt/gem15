@@ -168,7 +168,7 @@ async function readCell(lon, lat, layer, ext, mPerPx) {
 const COS = Math.cos(Math.PI / 4);
 const LIGHT = [-0.5, 0.5, COS];
 
-async function renderTile(layer, shade, z, x, y) {
+async function renderTile(layer, shade, z, x, y, dem = false) {
   const N = TILE + 2; // 1 px margin for hillshade gradients
   const elev = new Float32Array(N * N).fill(NaN);
   if (z >= MIN_DATA_ZOOM) {
@@ -216,6 +216,24 @@ async function renderTile(layer, shade, z, x, y) {
 
   const img = new ImageData(TILE, TILE);
   const px = img.data;
+  if (dem) {
+    // Terrarium encoding: height = (R*256 + G + B/256) - 32768
+    for (let j = 0; j < TILE; j++) {
+      for (let i = 0; i < TILE; i++) {
+        let e = elev[(j + 1) * N + i + 1];
+        if (!(e === e)) e = 0;
+        const v = Math.min(65535, Math.max(0, e + 32768));
+        const o = (j * TILE + i) * 4;
+        px[o] = Math.floor(v / 256);
+        px[o + 1] = Math.floor(v) % 256;
+        px[o + 2] = Math.floor((v - Math.floor(v)) * 256);
+        px[o + 3] = 255;
+      }
+    }
+    const cv = new OffscreenCanvas(TILE, TILE);
+    cv.getContext('2d').putImageData(img, 0, 0);
+    return (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer();
+  }
   const mPerPx = elev.mPerPx || 1;
   for (let j = 0; j < TILE; j++) {
     for (let i = 0; i < TILE; i++) {
@@ -256,12 +274,13 @@ function setStatus() {
       : 'Data: GEM-15 (Google), CC-BY-4.0';
 }
 
-maplibregl.addProtocol('gem', async (params) => {
-  const [layer, shade, z, x, y] = params.url.replace('gem://', '').split('/');
+const gemProtocol = async (params) => {
+  const dem = params.url.startsWith('gemdem://');
+  const [layer, shade, z, x, y] = params.url.replace(/^gem(dem)?:\/\//, '').split('/');
   pending++;
   setStatus();
   try {
-    return { data: await renderTile(layer, shade === '1', +z, +x, +y) };
+    return { data: await renderTile(layer, shade === '1', +z, +x, +y, dem) };
   } catch (e) {
     console.error('tile failed', params.url, e);
     throw e;
@@ -269,7 +288,11 @@ maplibregl.addProtocol('gem', async (params) => {
     pending--;
     setStatus();
   }
-});
+};
+maplibregl.addProtocol('gem', gemProtocol);
+maplibregl.addProtocol('gemdem', gemProtocol);
+
+const demUrl = () => `gemdem://${document.querySelector('input[name=layer]:checked').value}/0/{z}/{x}/{y}`;
 
 const tileUrl = () => {
   const layer = document.querySelector('input[name=layer]:checked').value;
@@ -280,12 +303,16 @@ const tileUrl = () => {
 const map = new maplibregl.Map({
   container: 'map',
   hash: true,
-  center: [10.5, 46.5],
-  zoom: 9,
+  center: [7.6586, 45.9763],
+  zoom: 12.6,
+  pitch: 72,
+  bearing: 35,
+  maxPitch: 85,
   maxZoom: 15,
   style: {
     version: 8,
     sources: {
+      dem: { type: 'raster-dem', tiles: [demUrl()], tileSize: TILE, encoding: 'terrarium', minzoom: MIN_DATA_ZOOM, maxzoom: 13 },
       gem: { type: 'raster', tiles: [tileUrl()], tileSize: TILE, minzoom: MIN_DATA_ZOOM, maxzoom: 13, attribution: 'GEM-15 &copy; Google, CC-BY-4.0' },
     },
     layers: [
@@ -294,15 +321,26 @@ const map = new maplibregl.Map({
     ],
   },
 });
-map.addControl(new maplibregl.NavigationControl());
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 map.addControl(new maplibregl.ScaleControl());
 map.on('zoom', setStatus);
 
 function refresh() {
   map.getSource('gem').setTiles([tileUrl()]);
+  map.getSource('dem').setTiles([demUrl()]);
 }
 document.querySelectorAll('input[name=layer]').forEach((el) => el.addEventListener('change', refresh));
 document.getElementById('shade').addEventListener('change', refresh);
+
+// ---- 3D terrain / extrusion ----
+const extrudeEl = document.getElementById('extrude');
+const exagEl = document.getElementById('exag');
+function applyTerrain() {
+  map.setTerrain(extrudeEl.checked ? { source: 'dem', exaggeration: +exagEl.value } : null);
+}
+map.on('load', applyTerrain);
+extrudeEl.addEventListener('change', applyTerrain);
+exagEl.addEventListener('input', applyTerrain);
 
 // ---- Click: elevation lookup at full 15 m resolution ----
 async function elevationAt(lng, lat, layer) {
