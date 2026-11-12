@@ -165,6 +165,18 @@ async function readCell(lon, lat, layer, ext, mPerPx) {
   };
 }
 
+// Range requests fail transiently (rate limits, dropped connections); retry with backoff.
+async function withRetry(fn, tries = 3) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= tries - 1) throw e;
+      await new Promise((r) => setTimeout(r, 300 * 2 ** i));
+    }
+  }
+}
+
 const COS = Math.cos(Math.PI / 4);
 const LIGHT = [-0.5, 0.5, COS];
 
@@ -185,7 +197,7 @@ async function renderTile(layer, shade, z, x, y, dem = false) {
     for (let lon = Math.floor(west); lon <= Math.floor(east); lon++) {
       for (let lat = Math.floor(south); lat <= Math.floor(north); lat++) {
         jobs.push(
-          readCell(lon, lat, layer, ext, mPerPx)
+          withRetry(() => readCell(lon, lat, layer, ext, mPerPx))
             .then((c) => c && cells.set(`${lon},${lat}`, c))
             .catch((e) => console.warn('cell failed', lon, lat, e)),
         );
