@@ -278,12 +278,25 @@ async function renderTile(layer, shade, z, x, y, dem = false) {
 // ---- Map ----
 let pending = 0;
 const statusEl = document.getElementById('status');
+let noData = false;
 function setStatus() {
-  statusEl.textContent = pending
+  const base = pending
     ? `Loading ${pending} tile${pending > 1 ? 's' : ''}...`
     : map.getZoom() < MIN_DATA_ZOOM
       ? `Zoom in to level ${MIN_DATA_ZOOM} or higher to load data.`
-      : 'Data: GEM-15 (Google), CC-BY-4.0';
+      : noData
+        ? 'No elevation data here (open water or outside GEM-15 coverage).'
+        : 'Data: GEM-15 (Google), CC-BY-4.0';
+  statusEl.textContent = `Zoom ${map.getZoom().toFixed(1)} · ${base}`;
+}
+
+async function checkCoverage() {
+  if (map.getZoom() < MIN_DATA_ZOOM) noData = false;
+  else {
+    const c = map.getCenter();
+    noData = !(await getItem(Math.floor(c.lng), Math.floor(c.lat)));
+  }
+  setStatus();
 }
 
 const gemProtocol = async (params) => {
@@ -338,8 +351,7 @@ const map = new maplibregl.Map({
         id: 'countries-fill',
         type: 'fill',
         source: 'countries',
-        maxzoom: MIN_DATA_ZOOM,
-        paint: { 'fill-color': '#e8e6df' },
+        paint: { 'fill-color': '#cfcabb' },
       },
       { id: 'gem', type: 'raster', source: 'gem', paint: { 'raster-fade-duration': 0 } },
       {
@@ -358,6 +370,8 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 map.addControl(new maplibregl.ScaleControl());
 map.on('zoom', setStatus);
+map.on('moveend', checkCoverage);
+map.on('load', checkCoverage);
 
 function refresh() {
   map.getSource('gem').setTiles([tileUrl()]);
