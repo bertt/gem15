@@ -305,8 +305,8 @@ const map = new maplibregl.Map({
   hash: true,
   center: [7.6586, 45.9763],
   zoom: 12.6,
-  pitch: 72,
-  bearing: 35,
+  pitch: 0,
+  bearing: 0,
   maxPitch: 85,
   maxZoom: 15,
   style: {
