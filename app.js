@@ -78,15 +78,46 @@ const groupName = (lon, lat) => `${gfmt(Math.floor(lat / 10) * 10)}_${gfmt(Math.
 
 // ---- STAC + COG caches ----
 const itemCache = new Map();
+const groupCache = new Map();
+// Lists which cells exist in a group, so no requests are made for cells without data (404s).
+function getGroupCells(group) {
+  if (!groupCache.has(group)) {
+    const base = `gem-15/stac/gem-15/${group}/`;
+    groupCache.set(
+      group,
+      (async () => {
+        const cells = new Set();
+        let token = '';
+        do {
+          const url = `${API}?prefix=${encodeURIComponent(base)}&delimiter=/&fields=prefixes,nextPageToken` +
+            (token ? `&pageToken=${encodeURIComponent(token)}` : '');
+          const r = await fetch(url);
+          if (!r.ok) throw new Error(`list ${group}: ${r.status}`);
+          const j = await r.json();
+          (j.prefixes || []).forEach((p) => cells.add(p.slice(base.length, -1)));
+          token = j.nextPageToken || '';
+        } while (token);
+        return cells;
+      })().catch((e) => {
+        groupCache.delete(group);
+        throw e;
+      }),
+    );
+  }
+  return groupCache.get(group);
+}
+
 function getItem(lon, lat) {
   const cell = cellName(lon, lat);
   if (!itemCache.has(cell)) {
     const ts = performance.now();
-    const url = corsUrl(`stac/gem-15/${groupName(lon, lat)}/${cell}/${cell}.json`);
+    const group = groupName(lon, lat);
+    const url = corsUrl(`stac/gem-15/${group}/${cell}/${cell}.json`);
     itemCache.set(
       cell,
-      fetch(url)
-        .then((r) => (r.ok ? r.json() : null))
+      getGroupCells(group)
+        .then((cells) => (cells.has(cell) ? fetch(url) : null))
+        .then((r) => (r && r.ok ? r.json() : null))
         .then((j) => {
           if (DEBUG_TIMING) console.debug(`stac ${cell}: ${(performance.now() - ts).toFixed(0)}ms`);
           return j;
