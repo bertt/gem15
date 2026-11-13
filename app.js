@@ -437,10 +437,10 @@ const tileUrl = () => {
 const map = new maplibregl.Map({
   container: 'map',
   hash: true,
-  center: [7.6586, 45.9763],
-  zoom: 12.6,
-  pitch: 0,
-  bearing: 0,
+  center: [-16.6079, 28.1652],
+  zoom: 10.83,
+  pitch: 42,
+  bearing: -12.6,
   maxPitch: 85,
   maxZoom: 15,
   style: {
