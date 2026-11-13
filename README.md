@@ -52,3 +52,19 @@ Source: the [GEM-15 Earth Engine catalog entry](https://developers.google.com/ea
 The elevation shown in the click popup uses this datum.
 
 Pixels without data (NaN) show the ocean color; clicking such a pixel shows "No data".
+
+## Known artifacts
+
+In rugged terrain with hillshade enabled you may see faint, near-vertical stripes with a regular
+spacing, a fine dotted pattern, and small grey patches (zoom 12.5 shown below).
+
+![Stripe and dot artifacts in GEM-15 terrain at zoom 12.5](docs/stripe-artifacts.png)
+
+**Likely explanation:** these come from the data, not the viewer. GEM-15 is derived from sub-meter
+optical stereo satellite imagery, and such DEMs typically contain along-track strip/scan-line
+artifacts, small stitching offsets between image strips, and matching noise. Hillshade amplifies
+tiny elevation differences, so these become visible. The grey patches are pixels without data
+(NaN), e.g. where stereo matching failed (clouds, water, shadow).
+
+The viewer adds a minor effect: pixels are sampled nearest-neighbour (no interpolation), which makes
+small stair-steps in the hillshade slightly harsher. Disabling **Hillshade** hides most of the stripes.
