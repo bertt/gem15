@@ -411,7 +411,12 @@ const map = new maplibregl.Map({
         data: 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
         attribution: 'Borders &copy; Natural Earth',
       },
+      cities: {
+        type: 'geojson',
+        data: 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_10m_populated_places_simple.geojson',
+      },
     },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     layers: [
       { id: 'ocean', type: 'background', paint: { 'background-color': OCEAN } },
       {
@@ -431,12 +436,58 @@ const map = new maplibregl.Map({
           'line-width': ['interpolate', ['linear'], ['zoom'], 0, 0.5, 8, 1.2],
         },
       },
+      {
+        id: 'cities',
+        type: 'symbol',
+        source: 'cities',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 12,
+          'text-anchor': 'top',
+          'text-offset': [0, 0.5],
+          'text-optional': true,
+          'symbol-sort-key': ['-', 0, ['coalesce', ['get', 'pop_max'], 0]],
+          'icon-allow-overlap': true,
+        },
+        paint: {
+          'text-color': '#222',
+          'text-halo-color': 'rgba(255,255,255,0.9)',
+          'text-halo-width': 1.5,
+        },
+      },
+      {
+        id: 'cities-dot',
+        type: 'circle',
+        source: 'cities',
+        paint: {
+          'circle-radius': 3,
+          'circle-color': '#d32f2f',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1,
+        },
+      },
     ],
   },
 });
+const COLOUR_MAX_ZOOM = 13;
+const zoomRangeEl = document.getElementById('zoomrange');
+function updateZoomRange() {
+  const terrain = document.getElementById('extrude').checked;
+  const max = terrain ? DEM_MAX_ZOOM : COLOUR_MAX_ZOOM;
+  const over = map.getZoom() > max;
+  zoomRangeEl.textContent =
+    `Available zoom levels: colour ${MIN_DATA_ZOOM}–${COLOUR_MAX_ZOOM}, terrain ${MIN_DATA_ZOOM}–${DEM_MAX_ZOOM}. ` +
+    (over ? `Overzoomed (beyond ${max}).` : 'No overzoom.');
+  zoomRangeEl.style.color = over ? '#c62828' : '#2e7d32';
+  zoomRangeEl.style.fontWeight = 'bold';
+}
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 map.addControl(new maplibregl.ScaleControl());
 map.on('zoom', setStatus);
+map.on('zoom', updateZoomRange);
+document.getElementById('extrude').addEventListener('change', updateZoomRange);
+updateZoomRange();
 map.on('moveend', checkCoverage);
 map.on('load', checkCoverage);
 
