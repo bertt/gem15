@@ -12,7 +12,7 @@ white peaks) and optionally hillshaded.
 - For each tile it finds the 1x1 degree STAC items (`stac/gem-15/<group>/<cell>/<cell>.json`),
   reads only the needed window/overview of the COG with HTTP range requests
   ([geotiff.js](https://geotiffjs.github.io/)), reprojects from local UTM with
-  [proj4js](http://proj4js.org/), and applies the color ramp and hillshade.
+  [proj4js](http://proj4js.org/), samples elevations bilinearly, and applies the color ramp and hillshade.
 - Data is only loaded from zoom level 7 and up.
 - Click the map to see the elevation (full 15 m resolution) of the selected layer in a popup.
 - Libraries are loaded from CDNs; there is no build step and no server component.
@@ -55,23 +55,10 @@ Pixels without data (NaN) show the ocean color; clicking such a pixel shows "No 
 
 ## Known artifacts
 
-In rugged terrain you may notice two kinds of artifacts. Both most likely originate in the GEM-15
-data itself, not in the viewer.
+In rugged terrain you may notice an artifact that most likely originates in the GEM-15 data itself,
+not in the viewer.
 
-### 1. Cells / stripes
-
-With hillshade enabled, faint near-vertical stripes with a regular spacing and a fine dotted pattern
-show up (zoom 12.5 below).
-
-![Stripe and dot artifacts in GEM-15 terrain at zoom 12.5](docs/stripe-artifacts.png)
-
-**Likely explanation:** GEM-15 is derived from sub-meter optical stereo satellite imagery. Such DEMs
-typically contain along-track strip/scan-line artifacts, small stitching offsets between image
-strips, and matching noise. Hillshade amplifies tiny elevation differences, so these become visible.
-The viewer adds a minor effect: pixels are sampled nearest-neighbour (no interpolation), which makes
-small stair-steps in the hillshade slightly harsher. Disabling **Hillshade** hides most of the stripes.
-
-### 2. Grey patches (no data)
+### Grey patches (no data)
 
 Large and small grey areas appear, mostly in steep high-mountain terrain (zoom 11.6 below).
 

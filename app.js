@@ -237,6 +237,17 @@ function cellValue(cell, c, r) {
   return ch ? ch.data[(r & (CHUNK - 1)) * ch.w + (c & (CHUNK - 1))] : NaN;
 }
 
+// Bilinear sampling (pixel centers at +0.5) avoids blocky nearest-neighbour terraces in the hillshade.
+function sampleBilinear(cell, c, r) {
+  const fc = c - 0.5, fr = r - 0.5;
+  const c0 = Math.floor(fc), r0 = Math.floor(fr);
+  const tx = fc - c0, ty = fr - r0;
+  const at = (cc, rr) => cellValue(cell, Math.min(cell.w - 1, Math.max(0, cc)), Math.min(cell.h - 1, Math.max(0, rr)));
+  const a = at(c0, r0), b = at(c0 + 1, r0), d = at(c0, r0 + 1), e = at(c0 + 1, r0 + 1);
+  if (a !== a || b !== b || d !== d || e !== e) return cellValue(cell, Math.floor(c), Math.floor(r));
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (d * (1 - tx) + e * tx) * ty;
+}
+
 // Range requests fail transiently (rate limits, dropped connections); retry with backoff.
 async function withRetry(fn, tries = 3) {
   for (let i = 0; ; i++) {
@@ -316,7 +327,7 @@ async function renderTile(layer, shade, z, x, y, dem = false) {
           const c = (cell.gc[k0] * (1 - fx) + cell.gc[k0 + 1] * fx) * (1 - fy) + (cell.gc[k1] * (1 - fx) + cell.gc[k1 + 1] * fx) * fy;
           const r = (cell.gr[k0] * (1 - fx) + cell.gr[k0 + 1] * fx) * (1 - fy) + (cell.gr[k1] * (1 - fx) + cell.gr[k1 + 1] * fx) * fy;
           if (c < 0 || r < 0 || c >= cell.w || r >= cell.h) continue;
-          elev[j * N + i] = cellValue(cell, Math.floor(c), Math.floor(r));
+          elev[j * N + i] = sampleBilinear(cell, c, r);
         }
       }
     }
