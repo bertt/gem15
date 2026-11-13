@@ -55,16 +55,29 @@ Pixels without data (NaN) show the ocean color; clicking such a pixel shows "No 
 
 ## Known artifacts
 
-In rugged terrain with hillshade enabled you may see faint, near-vertical stripes with a regular
-spacing, a fine dotted pattern, and small grey patches (zoom 12.5 shown below).
+In rugged terrain you may notice two kinds of artifacts. Both most likely originate in the GEM-15
+data itself, not in the viewer.
+
+### 1. Cells / stripes
+
+With hillshade enabled, faint near-vertical stripes with a regular spacing and a fine dotted pattern
+show up (zoom 12.5 below).
 
 ![Stripe and dot artifacts in GEM-15 terrain at zoom 12.5](docs/stripe-artifacts.png)
 
-**Likely explanation:** these come from the data, not the viewer. GEM-15 is derived from sub-meter
-optical stereo satellite imagery, and such DEMs typically contain along-track strip/scan-line
-artifacts, small stitching offsets between image strips, and matching noise. Hillshade amplifies
-tiny elevation differences, so these become visible. The grey patches are pixels without data
-(NaN), e.g. where stereo matching failed (clouds, water, shadow).
-
+**Likely explanation:** GEM-15 is derived from sub-meter optical stereo satellite imagery. Such DEMs
+typically contain along-track strip/scan-line artifacts, small stitching offsets between image
+strips, and matching noise. Hillshade amplifies tiny elevation differences, so these become visible.
 The viewer adds a minor effect: pixels are sampled nearest-neighbour (no interpolation), which makes
 small stair-steps in the hillshade slightly harsher. Disabling **Hillshade** hides most of the stripes.
+
+### 2. Grey patches (no data)
+
+Large and small grey areas appear, mostly in steep high-mountain terrain (zoom 11.6 below).
+
+![Grey no-data patches in GEM-15 terrain at zoom 11.6](docs/nodata-patches.png)
+
+**Likely explanation:** these are pixels without data (NaN), drawn grey. Stereo matching fails where
+the imagery has no usable texture or correlation, for example snow and ice fields, cloud cover, deep
+shadow, or water. The gaps are not filled in the source data, so the viewer shows them as-is.
+Clicking such a pixel shows "No data".
