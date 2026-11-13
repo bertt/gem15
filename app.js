@@ -7,7 +7,12 @@ const corsUrl = (path) => `${API}${encodeURIComponent('gem-15/' + path)}?alt=med
 
 const TILE = 256;
 const MIN_DATA_ZOOM = 7;
-const MAX_READ = 512;
+const CHUNK_BITS = 8;
+const DEM_MAX_ZOOM = 11; // terrain needs less detail than the colour layer
+const LEVEL_TOLERANCE = 1.25; // accept an overview up to 25% coarser than the screen resolution
+const CHUNK = 1 << CHUNK_BITS;
+const G = 16; // reprojection grid intervals per tile
+const DEBUG_TIMING = new URLSearchParams(location.search).has('timing');
 const BASE_RES = 15;
 
 // Hypsometric tint: lowland green -> yellow -> orange -> brown -> snow.
@@ -76,11 +81,16 @@ const itemCache = new Map();
 function getItem(lon, lat) {
   const cell = cellName(lon, lat);
   if (!itemCache.has(cell)) {
+    const ts = performance.now();
     const url = corsUrl(`stac/gem-15/${groupName(lon, lat)}/${cell}/${cell}.json`);
     itemCache.set(
       cell,
       fetch(url)
         .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (DEBUG_TIMING) console.debug(`stac ${cell}: ${(performance.now() - ts).toFixed(0)}ms`);
+          return j;
+        })
         .catch(() => null),
     );
   }
@@ -94,14 +104,12 @@ function getImages(href) {
     tiffCache.set(
       url,
       (async () => {
-        const tiff = await GeoTIFF.fromUrl(url);
+        const th = performance.now();
+        const tiff = await GeoTIFF.fromUrl(url, { blockSize: 256 * 1024, cacheSize: 200 });
         const count = await tiff.getImageCount();
-        const images = [];
-        for (let i = 0; i < count; i++) {
-          const img = await tiff.getImage(i);
-          images.push({ img, w: img.getWidth(), h: img.getHeight() });
-        }
-        return images;
+        const imgs = await Promise.all(Array.from({ length: count }, (_, i) => tiff.getImage(i)));
+        if (DEBUG_TIMING) console.debug(`header ${url.slice(-40)}: ${count} levels, ${(performance.now() - th).toFixed(0)}ms`);
+        return imgs.map((img) => ({ img, w: img.getWidth(), h: img.getHeight() }));
       })().catch((e) => {
         tiffCache.delete(url);
         throw e;
@@ -127,7 +135,7 @@ async function readCell(lon, lat, layer, ext, mPerPx) {
 
   // Coarsest image whose pixels are still finer than the screen resolution.
   const pick = images.reduce(
-    (best, im) => (BASE_RES * (full.w / im.w) <= mPerPx && im.w < best.w ? im : best),
+    (best, im) => (BASE_RES * (full.w / im.w) <= mPerPx * LEVEL_TOLERANCE && im.w < best.w ? im : best),
     full,
   );
 
@@ -152,17 +160,50 @@ async function readCell(lon, lat, layer, ext, mPerPx) {
   const wy1 = Math.min(pick.h, Math.ceil(maxR) + 2);
   if (wx1 <= wx0 || wy1 <= wy0) return null;
 
-  const ww = wx1 - wx0;
-  const wh = wy1 - wy0;
-  const outW = Math.min(ww, MAX_READ);
-  const outH = Math.min(wh, MAX_READ);
-  const opts = { window: [wx0, wy0, wx1, wy1], samples: [0], interleave: false };
-  if (outW !== ww || outH !== wh) Object.assign(opts, { width: outW, height: outH, resampleMethod: 'nearest' });
-  const rasters = await pick.img.readRasters(opts);
-  return {
-    data: rasters[0], proj, t, outW, outH, ww, wh, wx0, wy0,
-    sx: pick.w / full.w, sy: pick.h / full.h,
-  };
+  const cx0 = Math.floor(wx0 / CHUNK), cx1 = Math.floor((wx1 - 1) / CHUNK);
+  const cy0 = Math.floor(wy0 / CHUNK), cy1 = Math.floor((wy1 - 1) / CHUNK);
+  const level = images.indexOf(pick);
+  const chunks = new Map();
+  const reads = [];
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      reads.push(getChunk(asset.href, level, pick, cx, cy).then((ch) => chunks.set(cx + ',' + cy, ch)));
+    }
+  }
+  await Promise.all(reads);
+  return { chunks, proj, t, w: pick.w, h: pick.h, sx: pick.w / full.w, sy: pick.h / full.h };
+}
+
+// Aligned chunks are shared between tiles, so neighbouring tiles don't each issue their own reads.
+const chunkCache = new Map();
+const MAX_CHUNKS = 200;
+// Decompresses COG blocks in web workers instead of on the main thread.
+const decodePool = new GeoTIFF.Pool(Math.min(4, navigator.hardwareConcurrency || 2));
+function getChunk(href, level, pick, cx, cy) {
+  const key = `${href}|${level}|${cx},${cy}`;
+  let p = chunkCache.get(key);
+  if (p) {
+    chunkCache.delete(key); // refresh LRU position
+  } else {
+    const tc = performance.now();
+    const x0 = cx * CHUNK, y0 = cy * CHUNK;
+    const x1 = Math.min(pick.w, x0 + CHUNK), y1 = Math.min(pick.h, y0 + CHUNK);
+    p = withRetry(() => pick.img.readRasters({ window: [x0, y0, x1, y1], samples: [0], interleave: false, pool: decodePool })).then(
+      (r) => {
+        if (DEBUG_TIMING) console.debug(`chunk L${level} ${cx},${cy}: ${(performance.now() - tc).toFixed(0)}ms, ${r[0].byteLength} B decoded`);
+        return { data: r[0], w: x1 - x0 };
+      },
+    );
+    p.catch(() => chunkCache.delete(key));
+    if (chunkCache.size >= MAX_CHUNKS) chunkCache.delete(chunkCache.keys().next().value);
+  }
+  chunkCache.set(key, p);
+  return p;
+}
+
+function cellValue(cell, c, r) {
+  const ch = cell.chunks.get((c >> CHUNK_BITS) + ',' + (r >> CHUNK_BITS));
+  return ch ? ch.data[(r & (CHUNK - 1)) * ch.w + (c & (CHUNK - 1))] : NaN;
 }
 
 // Range requests fail transiently (rate limits, dropped connections); retry with backoff.
@@ -181,6 +222,7 @@ const COS = Math.cos(Math.PI / 4);
 const LIGHT = [-0.5, 0.5, COS];
 
 async function renderTile(layer, shade, z, x, y, dem = false) {
+  const t0 = performance.now();
   const N = TILE + 2; // 1 px margin for hillshade gradients
   const elev = new Float32Array(N * N).fill(NaN);
   if (z >= MIN_DATA_ZOOM) {
@@ -205,25 +247,50 @@ async function renderTile(layer, shade, z, x, y, dem = false) {
     }
     await Promise.all(jobs);
 
+    const tFetch = performance.now();
     if (cells.size) {
+      const lons = new Float64Array(N);
+      for (let i = 0; i < N; i++) lons[i] = tileLon(x + (i - 0.5) / TILE, z);
+      // Run proj4 only on a coarse (G+1)^2 grid per cell and interpolate bilinearly in between.
+      for (const cell of cells.values()) {
+        const gc = new Float64Array((G + 1) * (G + 1));
+        const gr = new Float64Array((G + 1) * (G + 1));
+        for (let gj = 0; gj <= G; gj++) {
+          const lat = tileLat(y + ((gj * (N - 1)) / G - 0.5) / TILE, z);
+          for (let gi = 0; gi <= G; gi++) {
+            const lon = tileLon(x + ((gi * (N - 1)) / G - 0.5) / TILE, z);
+            const [ux, uy] = cell.proj.forward([lon, lat]);
+            gc[gj * (G + 1) + gi] = ((ux - cell.t[2]) / cell.t[0]) * cell.sx;
+            gr[gj * (G + 1) + gi] = ((uy - cell.t[5]) / cell.t[4]) * cell.sy;
+          }
+        }
+        cell.gc = gc;
+        cell.gr = gr;
+      }
       for (let j = 0; j < N; j++) {
         const lat = tileLat(y + (j - 0.5) / TILE, z);
         const latCell = Math.floor(lat);
+        const v = (j * G) / (N - 1);
+        const gj = Math.min(G - 1, Math.floor(v));
+        const fy = v - gj;
         for (let i = 0; i < N; i++) {
-          const lon = tileLon(x + (i - 0.5) / TILE, z);
+          const lon = lons[i];
           const cell = cells.get(`${Math.floor(lon)},${latCell}`);
           if (!cell) continue;
-          const [ux, uy] = cell.proj.forward([lon, lat]);
-          const c = ((ux - cell.t[2]) / cell.t[0]) * cell.sx - cell.wx0;
-          const r = ((uy - cell.t[5]) / cell.t[4]) * cell.sy - cell.wy0;
-          if (c < 0 || r < 0 || c >= cell.ww || r >= cell.wh) continue;
-          const cc = Math.floor((c * cell.outW) / cell.ww);
-          const rr = Math.floor((r * cell.outH) / cell.wh);
-          elev[j * N + i] = cell.data[rr * cell.outW + cc];
+          const u = (i * G) / (N - 1);
+          const gi = Math.min(G - 1, Math.floor(u));
+          const fx = u - gi;
+          const k0 = gj * (G + 1) + gi;
+          const k1 = k0 + G + 1;
+          const c = (cell.gc[k0] * (1 - fx) + cell.gc[k0 + 1] * fx) * (1 - fy) + (cell.gc[k1] * (1 - fx) + cell.gc[k1 + 1] * fx) * fy;
+          const r = (cell.gr[k0] * (1 - fx) + cell.gr[k0 + 1] * fx) * (1 - fy) + (cell.gr[k1] * (1 - fx) + cell.gr[k1 + 1] * fx) * fy;
+          if (c < 0 || r < 0 || c >= cell.w || r >= cell.h) continue;
+          elev[j * N + i] = cellValue(cell, Math.floor(c), Math.floor(r));
         }
       }
     }
     elev.mPerPx = mPerPx;
+    if (DEBUG_TIMING) console.debug(`tile ${z}/${x}/${y}: fetch ${(tFetch - t0).toFixed(0)}ms, sample ${(performance.now() - tFetch).toFixed(0)}ms`);
   }
 
   const img = new ImageData(TILE, TILE);
@@ -337,7 +404,7 @@ const map = new maplibregl.Map({
   style: {
     version: 8,
     sources: {
-      dem: { type: 'raster-dem', tiles: [demUrl()], tileSize: TILE, encoding: 'terrarium', minzoom: MIN_DATA_ZOOM, maxzoom: 13 },
+      dem: { type: 'raster-dem', tiles: [demUrl()], tileSize: TILE, encoding: 'terrarium', minzoom: MIN_DATA_ZOOM, maxzoom: DEM_MAX_ZOOM },
       gem: { type: 'raster', tiles: [tileUrl()], tileSize: TILE, minzoom: MIN_DATA_ZOOM, maxzoom: 13, attribution: 'GEM-15 &copy; Google, CC-BY-4.0' },
       countries: {
         type: 'geojson',
