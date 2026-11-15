@@ -6,6 +6,22 @@ STAC catalog. DTM/DSM Cloud-Optimized GeoTIFFs are read directly in the browser,
 colored with a hypsometric tint (green lowlands, yellow/orange hills, brown mountains,
 white peaks) and optionally hillshaded.
 
+## About the data: how Google made GEM-15
+
+GEM-15 is an experimental near-global elevation dataset at 15 m grid spacing, derived by Google Research from
+sub-meter optical **stereo satellite imagery** (acquired through 2024: mainly 30 cm Pléiades Neo, plus
+WorldView-2/3/4, GeoEye-1, Pléiades 1A/1B and 1.5 m SPOT).
+
+- **DSM** (surface model): reconstructed from the stereo imagery at 0.5 m native resolution, then aggregated to 15 m
+  (mean of the 2.5 m bilinear DSM within each 15 m cell). Extra bands give the 5th/50th/95th percentile and the
+  standard deviation within the cell.
+- **DTM** (bare-earth terrain model): predicted at 1.0 m resolution by a **deep learning model**, then aggregated to 15 m.
+- Coverage is 60°S–84°N, excluding Russia, China, Mongolia, Greenland and Antarctica. Water, snow/ice, salt pans and
+  other low-texture surfaces (and pixels differing >50 m from Copernicus GLO-30) are masked as no-data.
+
+Details: [Earth Engine catalog entry](https://developers.google.com/earth-engine/datasets/catalog/projects_climate-and-sustainability_assets_gem-15_v1)
+and the [preprint](https://eartharxiv.org/repository/view/16034/) ([doi:10.31223/X55N75](https://doi.org/10.31223/X55N75)).
+
 ## How it works
 
 - `app.js` registers a custom MapLibre protocol (`gem://`) that renders 256 px raster tiles on demand.
