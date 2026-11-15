@@ -17,6 +17,18 @@ white peaks) and optionally hillshaded.
 - Click the map to see the elevation (full 15 m resolution) of the selected layer in a popup.
 - Libraries are loaded from CDNs; there is no build step and no server component.
 
+## Coverage inspector
+
+`inspector.html` is a standalone page (MapLibre GL JS, no frameworks, no build step) that shows
+which 1° × 1° cells have GEM-15 data, at every zoom level.
+
+- On load it lists the STAC folders in the bucket (10° groups, then the cells in each group) through the
+  Cloud Storage JSON API and draws every cell as a polygon; cells without data are not drawn.
+- Hover highlights a cell; labels appear from zoom 7.
+- Click a cell to load its STAC item and show the details (bbox, resolution, UTM EPSG, dates) plus
+  download links for the DTM and DSM Cloud-Optimized GeoTIFFs (with file size and dimensions) and the STAC item JSON.
+- Open it at `/inspector.html` (e.g. `https://<user>.github.io/gem15/inspector.html` on GitHub Pages).
+
 ## CORS
 
 The public bucket URLs (`storage.googleapis.com/<bucket>/<object>`) send no CORS headers.
@@ -41,6 +53,7 @@ Enable GitHub Pages for the repository (branch root). The viewer only needs
 | --- | --- |
 | `index.html`, `style.css` | Page, layer controls and legend |
 | `app.js` | Tile rendering, color ramp, hillshade, map |
+| `inspector.html` | Coverage map of available cells with details and download links |
 
 ## Data
 

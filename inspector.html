@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GEM-15 Coverage Inspector</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+  <style>
+    html, body, #map { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #panel { position: absolute; top: 10px; left: 10px; width: 330px; max-height: calc(100% - 20px); overflow: auto;
+      background: #fff; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,.35); padding: 10px 12px; font-size: 13px; }
+    #panel h1 { font-size: 15px; margin: 0 0 4px; }
+    #status { color: #555; margin-bottom: 8px; }
+    #details h2 { font-size: 14px; margin: 8px 0 4px; }
+    #details table { border-collapse: collapse; width: 100%; }
+    #details td { padding: 2px 4px 2px 0; vertical-align: top; }
+    #details td:first-child { color: #666; white-space: nowrap; }
+    #details a { color: #0b62c4; word-break: break-all; }
+    .dl { margin: 4px 0; }
+    .hint { color: #777; }
+    .err { color: #b00020; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <h1>GEM-15 Coverage Inspector</h1>
+    <div id="status">Loading coverage…</div>
+    <div id="details"><span class="hint">Click a cell to see its details and download links.</span></div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <script>
+    const API = 'https://storage.googleapis.com/storage/v1/b/climate-and-sustainability/o/';
+    const STAC_PREFIX = 'gem-15/stac/gem-15/';
+    const mediaUrl = (object) => `${API}${encodeURIComponent(object)}?alt=media`;
+    const listUrl = (prefix, token) =>
+      `${API}?prefix=${encodeURIComponent(prefix)}&delimiter=/&fields=prefixes,nextPageToken` +
+      (token ? `&pageToken=${encodeURIComponent(token)}` : '');
+
+    const statusEl = document.getElementById('status');
+    const detailsEl = document.getElementById('details');
+
+    // Cell names look like "wm91sm1": lon -91, lat -1 (SW corner); 'm' = minus.
+    const num = (s) => (s[0] === 'm' ? -parseInt(s.slice(1), 10) : parseInt(s, 10));
+    function parseCell(name) {
+      const m = /^w(m?\d+)s(m?\d+)$/.exec(name);
+      return m ? [num(m[1]), num(m[2])] : null;
+    }
+
+    const features = [];
+    const collection = () => ({ type: 'FeatureCollection', features });
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+        sources: {
+          osm: {
+            type: 'raster', tileSize: 256, maxzoom: 19,
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          },
+        },
+        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+      },
+      center: [10, 30],
+      zoom: 2,
+      hash: true,
+    });
+    map.addControl(new maplibregl.NavigationControl());
+    map.addControl(new maplibregl.ScaleControl());
+
+    map.on('load', () => {
+      map.addSource('cells', { type: 'geojson', data: collection(), generateId: true });
+      map.addLayer({
+        id: 'cells-fill', type: 'fill', source: 'cells',
+        paint: {
+          'fill-color': '#e8590c',
+          'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.6,
+            ['boolean', ['feature-state', 'hover'], false], 0.5, 0.3],
+        },
+      });
+      map.addLayer({
+        id: 'cells-line', type: 'line', source: 'cells',
+        paint: {
+          'line-color': '#c2410c',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.2, 6, 0.6, 10, 1.2],
+        },
+      });
+      map.addLayer({
+        id: 'cells-label', type: 'symbol', source: 'cells', minzoom: 7,
+        layout: { 'text-field': ['get', 'cell'], 'text-size': 12, 'text-font': ['Open Sans Regular,Arial Unicode MS Regular'] },
+        paint: { 'text-color': '#7c2d12', 'text-halo-color': '#fff', 'text-halo-width': 1.5 },
+      });
+      loadCoverage();
+    });
+
+    // Lists all 10-degree groups, then the 1-degree cells in each group (cells without data have no entry).
+    async function listAll(prefix) {
+      const out = [];
+      let token = '';
+      do {
+        const r = await fetch(listUrl(prefix, token));
+        if (!r.ok) throw new Error(`list ${prefix}: HTTP ${r.status}`);
+        const j = await r.json();
+        out.push(...(j.prefixes || []));
+        token = j.nextPageToken || '';
+      } while (token);
+      return out;
+    }
+
+    async function loadCoverage() {
+      try {
+        const groups = await listAll(STAC_PREFIX);
+        let done = 0;
+        let pending = 0;
+        const queue = groups.slice();
+        const flush = () => map.getSource('cells').setData(collection());
+
+        async function worker() {
+          while (queue.length) {
+            const group = queue.shift();
+            try {
+              const groupName = group.slice(STAC_PREFIX.length, -1);
+              for (const p of await listAll(group)) {
+                const cell = p.slice(group.length, -1);
+                const ll = parseCell(cell);
+                if (!ll) continue;
+                const [x, y] = ll;
+                features.push({
+                  type: 'Feature',
+                  properties: { cell, group: groupName },
+                  geometry: { type: 'Polygon', coordinates: [[[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1], [x, y]]] },
+                });
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            done++;
+            if (++pending >= 15) { pending = 0; flush(); }
+            statusEl.textContent = `Loading coverage… ${done}/${groups.length} groups, ${features.length} cells`;
+          }
+        }
+        await Promise.all(Array.from({ length: 8 }, worker));
+        flush();
+        statusEl.textContent = `${features.length} cells with GEM-15 data (1° × 1°).`;
+      } catch (e) {
+        statusEl.innerHTML = `<span class="err">Failed to load coverage: ${e.message}</span>`;
+      }
+    }
+
+    // Hover + selection highlight
+    let hoverId = null;
+    let selectedId = null;
+    map.on('mousemove', 'cells-fill', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const id = e.features[0].id;
+      if (hoverId !== null && hoverId !== id) map.setFeatureState({ source: 'cells', id: hoverId }, { hover: false });
+      hoverId = id;
+      map.setFeatureState({ source: 'cells', id }, { hover: true });
+    });
+    map.on('mouseleave', 'cells-fill', () => {
+      map.getCanvas().style.cursor = '';
+      if (hoverId !== null) map.setFeatureState({ source: 'cells', id: hoverId }, { hover: false });
+      hoverId = null;
+    });
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const size = (b) => (b == null ? 'n/a' : b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${(b / 1e6).toFixed(1)} MB`);
+
+    map.on('click', 'cells-fill', async (e) => {
+      const f = e.features[0];
+      if (selectedId !== null) map.setFeatureState({ source: 'cells', id: selectedId }, { selected: false });
+      selectedId = f.id;
+      map.setFeatureState({ source: 'cells', id: selectedId }, { selected: true });
+
+      const { cell, group } = f.properties;
+      detailsEl.innerHTML = `<h2>Cell ${esc(cell)}</h2><span class="hint">Loading…</span>`;
+      const object = `${STAC_PREFIX}${group}/${cell}/${cell}.json`;
+      try {
+        const r = await fetch(mediaUrl(object));
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const item = await r.json();
+        if (selectedId !== f.id) return;
+        detailsEl.innerHTML = render(cell, group, item, object);
+      } catch (err) {
+        detailsEl.innerHTML = `<h2>Cell ${esc(cell)}</h2><span class="err">Failed to load item: ${esc(err.message)}</span>`;
+      }
+    });
+
+    function render(cell, group, item, object) {
+      const p = item.properties || {};
+      const b = item.bbox || [];
+      const rows = [
+        ['Item ID', item.id],
+        ['Group', group],
+        ['BBox (W,S,E,N)', b.join(', ')],
+        ['Resolution', p.gsd != null ? `${p.gsd} m` : 'n/a'],
+        ['UTM EPSG', p['proj:epsg']],
+        ['Created', p.created],
+        ['Updated', p.updated],
+      ];
+      let html = `<h2>Cell ${esc(cell)}</h2><table>` +
+        rows.map(([k, v]) => `<tr><td>${k}</td><td>${esc(v ?? 'n/a')}</td></tr>`).join('') + '</table>';
+      html += '<h2>Downloads</h2>';
+      for (const [key, a] of Object.entries(item.assets || {})) {
+        const shape = a['proj:shape'] ? `${a['proj:shape'][1]} × ${a['proj:shape'][0]} px` : 'n/a';
+        html += `<div class="dl"><b>${esc(a.title || key.toUpperCase())}</b><br>` +
+          `<a href="${esc(a.href)}" target="_blank" rel="noopener">${esc(a.href)}</a><br>` +
+          `<span class="hint">${size(a['file:size'])} · ${shape} · COG</span></div>`;
+      }
+      html += `<h2>STAC item</h2><a href="${esc(mediaUrl(object))}" target="_blank" rel="noopener">${esc(cell)}.json</a>`;
+      return html;
+    }
+  </script>
+</body>
+</html>
