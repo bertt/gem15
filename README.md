@@ -33,6 +33,7 @@ which 1° × 1° cells have GEM-15 data, at every zoom level.
 
 **Statistics (2026-11-15):** 13,485 cells with GEM-15 data (1° × 1° each), across 297 groups of 10° × 10°.
 The count is read live from the bucket, so it may change as data is added.
+COGs created: 2026-09-29T14:17:40Z.
 
 - Open it at `/inspector.html` (e.g. `https://<user>.github.io/gem15/inspector.html` on GitHub Pages).
 
