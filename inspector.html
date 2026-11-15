@@ -217,8 +217,7 @@
         const shape = a['proj:shape'] ? `${a['proj:shape'][1]} × ${a['proj:shape'][0]} px` : 'n/a';
         html += `<div class="dl"><b>${esc(a.title || key.toUpperCase())}</b><br>` +
           `<a href="${esc(a.href)}" target="_blank" rel="noopener">${esc(a.href)}</a><br>` +
-          `<span class="hint">${size(a['file:size'])} · ${shape} · COG` +
-          `${a.created ? ` · created ${esc(a.created)}` : ''}</span></div>`;
+          `<span class="hint">${size(a['file:size'])} · ${shape} · COG</span></div>`;
       }
       html += `<h2>STAC item</h2><a href="${esc(mediaUrl(object))}" target="_blank" rel="noopener">${esc(cell)}.json</a>`;
       return html;
