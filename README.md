@@ -34,6 +34,7 @@ which 1° × 1° cells have GEM-15 data, at every zoom level.
 **Statistics (2026-11-15):** 13,485 cells with GEM-15 data (1° × 1° each), across 297 groups of 10° × 10°.
 The count is read live from the bucket, so it may change as data is added.
 COGs created: 2026-09-29T14:17:40Z.
+Total size of the COGs: 11.19 TiB (≈ 12.3 TB), of which DSM 9.38 TiB (≈ 10.3 TB) and DTM 1.81 TiB (≈ 2.0 TB), 13,485 files each.
 
 - Open it at `/inspector.html` (e.g. `https://<user>.github.io/gem15/inspector.html` on GitHub Pages).
 
