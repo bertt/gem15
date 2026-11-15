@@ -79,6 +79,12 @@ referenced to the **EGM96 geoid** ([EPSG:5773](https://epsg.io/5773)), not ellip
 Source: the [GEM-15 Earth Engine catalog entry](https://developers.google.com/earth-engine/datasets/catalog/projects_climate-and-sustainability_assets_gem-15_v1).
 The elevation shown in the click popup uses this datum.
 
+**Encoding:** the GeoTIFF COGs store elevation as plain **32-bit floating point** (IEEE float32, `SampleFormat=3`)
+in metres, with no scale/offset and DEFLATE compression. Band 1 is the elevation (`dsm`/`dtm`); the other bands are
+the 5th/50th/95th percentile and standard deviation. No-data is `NaN` (`GDAL_NODATA=nan`).
+The viewer reads band 1 only. (The MapLibre `raster-dem` source it generates for hillshade uses Terrarium RGB encoding,
+but that is a derived tile, not the COG encoding.)
+
 Pixels without data (NaN) show the ocean color; clicking such a pixel shows "No data".
 
 ## Known artifacts
