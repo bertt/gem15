@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
   <style>
     html, body, #map { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map {
+      background:
+        radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent),
+        radial-gradient(1px 1px at 28% 72%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 44% 34%, #cfe3ff, transparent),
+        radial-gradient(1px 1px at 63% 12%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 78% 58%, #fff, transparent),
+        radial-gradient(1px 1px at 90% 83%, #cfe3ff, transparent),
+        radial-gradient(1px 1px at 8% 90%, #fff, transparent),
+        radial-gradient(1px 1px at 55% 88%, #fff, transparent),
+        radial-gradient(ellipse at 50% 40%, #14213d 0%, #080c1c 60%, #02030a 100%);
+    }
     #panel { position: absolute; top: 10px; left: 10px; width: 330px; max-height: calc(100% - 20px); overflow: auto;
       background: #fff; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,.35); padding: 10px 12px; font-size: 13px; }
     #panel h1 { font-size: 15px; margin: 0 0 4px; }
@@ -53,18 +65,7 @@
 
     const map = new maplibregl.Map({
       container: 'map',
-      style: {
-        version: 8,
-        glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-        sources: {
-          osm: {
-            type: 'raster', tileSize: 256, maxzoom: 19,
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          },
-        },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-      },
+      style: 'https://tiles.openfreemap.org/styles/positron',
       center: [10, 30],
       zoom: 2,
       hash: true,
@@ -73,6 +74,8 @@
     map.addControl(new maplibregl.ScaleControl());
 
     map.on('load', () => {
+      map.setProjection({ type: 'globe' });
+      map.setSky({ 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] });
       map.addSource('cells', { type: 'geojson', data: collection(), generateId: true });
       map.addLayer({
         id: 'cells-fill', type: 'fill', source: 'cells',
@@ -99,7 +102,7 @@
       });
       map.addLayer({
         id: 'cells-label', type: 'symbol', source: 'cells', minzoom: 7,
-        layout: { 'text-field': ['get', 'cell'], 'text-size': 12, 'text-font': ['Open Sans Regular,Arial Unicode MS Regular'] },
+        layout: { 'text-field': ['get', 'cell'], 'text-size': 12, 'text-font': ['Noto Sans Regular'] },
         paint: { 'text-color': '#7c2d12', 'text-halo-color': '#fff', 'text-halo-width': 1.5 },
       });
       loadCoverage();
