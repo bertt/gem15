@@ -43,7 +43,9 @@ which 1° × 1° cells have GEM-15 data, at every zoom level.
 - Hover highlights a cell; labels appear from zoom 7.
 - Click a cell to load its STAC item and show the details (bbox, resolution, UTM EPSG, dates) plus
   download links for the DTM and DSM Cloud-Optimized GeoTIFFs (with file size and dimensions) and the STAC item JSON.
-Live: <https://bertt.github.io/gem15/inspector.html>
+[![Coverage inspector showing 13485 cells on a globe (screenshot, 2026-11-16)](docs/inspector-globe.png)](https://bertt.github.io/gem15/inspector.html)
+
+*Screenshot taken on 2026-11-16. Live: <https://bertt.github.io/gem15/inspector.html>*
 
 **Statistics (2026-11-15):** 13,485 cells with GEM-15 data (1° × 1° each), across 297 groups of 10° × 10°.
 The count is read live from the bucket, so it may change as data is added.
