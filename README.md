@@ -13,7 +13,7 @@ sub-meter optical **stereo satellite imagery** (acquired through 2024: mainly 30
 WorldView-2/3/4, GeoEye-1, Pléiades 1A/1B and 1.5 m SPOT).
 
 - **DSM** (surface model): reconstructed from the stereo imagery at 0.5 m native resolution, then aggregated to 15 m
-  (mean of the 2.5 m bilinear DSM within each 15 m cell). Extra bands give the 5th/50th/95th percentile and the
+  (mean of the 2.5 m bilinear DSM within each 15 m cell). DSM files carry extra bands with the 5th/50th/95th percentile and the
   standard deviation within the cell.
 - **DTM** (bare-earth terrain model): predicted at 1.0 m resolution by a **deep learning model**, then aggregated to 15 m.
 - Coverage is 60°S–84°N, excluding Russia, China, Mongolia, Greenland and Antarctica. Water, snow/ice, salt pans and
@@ -43,9 +43,7 @@ which 1° × 1° cells have GEM-15 data, at every zoom level.
 - Hover highlights a cell; labels appear from zoom 7.
 - Click a cell to load its STAC item and show the details (bbox, resolution, UTM EPSG, dates) plus
   download links for the DTM and DSM Cloud-Optimized GeoTIFFs (with file size and dimensions) and the STAC item JSON.
-![Coverage inspector showing 13485 cells with a selected cell (screenshot, 2026-11-15)](docs/inspector.png)
-
-*Screenshot taken on 2026-11-15.*
+Live: <https://bertt.github.io/gem15/inspector.html>
 
 **Statistics (2026-11-15):** 13,485 cells with GEM-15 data (1° × 1° each), across 297 groups of 10° × 10°.
 The count is read live from the bucket, so it may change as data is added.
@@ -58,7 +56,7 @@ Total size of the COGs:
 | DTM | 13,485 | 1.81 TiB (≈ 2.0 TB) |
 | Total | 26,970 | 11.19 TiB (≈ 12.3 TB) |
 
-- Open it at `/inspector.html` (e.g. `https://<user>.github.io/gem15/inspector.html` on GitHub Pages).
+- Open it at `/inspector.html` (live: <https://bertt.github.io/gem15/inspector.html>).
 
 ## CORS
 
@@ -96,8 +94,8 @@ Source: the [GEM-15 Earth Engine catalog entry](https://developers.google.com/ea
 The elevation shown in the click popup uses this datum.
 
 **Encoding:** the GeoTIFF COGs store elevation as plain **32-bit floating point** (IEEE float32, `SampleFormat=3`)
-in metres, with no scale/offset and DEFLATE compression. Band 1 is the elevation (`dsm`/`dtm`); the other bands are
-the 5th/50th/95th percentile and standard deviation. No-data is `NaN` (`GDAL_NODATA=nan`).
+in metres, with no scale/offset and DEFLATE compression. DSM files have 5 bands: band 1 is the elevation (mean), the other bands are
+the 5th/50th/95th percentile and standard deviation. DTM files have a single band (elevation only). No-data is `NaN` (`GDAL_NODATA=nan`).
 The viewer reads band 1 only. (The MapLibre `raster-dem` source it generates for hillshade uses Terrarium RGB encoding,
 but that is a derived tile, not the COG encoding.)
 
