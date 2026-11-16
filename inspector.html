@@ -69,8 +69,8 @@
       center: [10, 30],
       zoom: 2,
       hash: true,
-      projection: { type: 'globe' },
     });
+    map.on('style.load', () => map.setProjection({ type: 'globe' }));
     map.addControl(new maplibregl.NavigationControl());
     map.addControl(new maplibregl.ScaleControl());
 
