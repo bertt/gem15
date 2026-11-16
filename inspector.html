@@ -69,12 +69,12 @@
       center: [10, 30],
       zoom: 2,
       hash: true,
+      projection: { type: 'globe' },
     });
     map.addControl(new maplibregl.NavigationControl());
     map.addControl(new maplibregl.ScaleControl());
 
     map.on('load', () => {
-      map.setProjection({ type: 'globe' });
       map.setSky({ 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] });
       map.addSource('cells', { type: 'geojson', data: collection(), generateId: true });
       map.addLayer({
